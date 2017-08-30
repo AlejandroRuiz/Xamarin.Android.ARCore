@@ -41,7 +41,7 @@ namespace Xamarin.Android.ARCore.Test
 		private float[] mAnchorMatrix = new float[16];
 
         // Tap handling and UI.
-        private BlockingCollection<MotionEvent> mQueuedSingleTaps = new BlockingCollection<MotionEvent>(16);
+        private ConcurrentQueue<MotionEvent> mQueuedSingleTaps = new ConcurrentQueue<MotionEvent>();
         private List<PlaneAttachment> mTouches = new List<PlaneAttachment>();
 
         public bool OnDown(MotionEvent e)
@@ -170,7 +170,10 @@ namespace Xamarin.Android.ARCore.Test
 		private void onSingleTap(MotionEvent e)
 		{
             // Queue tap if there is space. Tap is lost if queue is full.
-            mQueuedSingleTaps.TryAdd(e);
+            if (mQueuedSingleTaps.Count < 16)
+            {
+                mQueuedSingleTaps.Enqueue(e);
+            }
 		}
 
         public void OnSurfaceCreated(IGL10 gl, Javax.Microedition.Khronos.Egl.EGLConfig config)
@@ -227,9 +230,11 @@ namespace Xamarin.Android.ARCore.Test
                 // camera framerate.
                 Frame frame = mSession.Update();
 
-                // Handle taps. Handling only one tap per frame, as taps are usually low frequency
-                // compared to frame rate.
-                MotionEvent tap = mQueuedSingleTaps.Take();
+				// Handle taps. Handling only one tap per frame, as taps are usually low frequency
+				// compared to frame rate.
+				MotionEvent tap = null;
+				mQueuedSingleTaps.TryDequeue(out tap);
+
                 if (tap != null && frame.GetTrackingState() == Frame.TrackingState.Tracking)
                 {
                     foreach (HitResult hit in frame.HitTest(tap))
